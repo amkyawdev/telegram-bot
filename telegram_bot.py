@@ -22,12 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Get credentials from environment
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8326636755:AAE0oBv0fBlypnn4_HkgDHHZevswTT-sO30')
-OPENHANDS_API_KEY = os.environ.get('OPENHANDS_CLOUD_API_KEY', os.environ.get('OPENHANDS_API_KEY', ''))
-
-# If no API key provided, use the default one
-if not OPENHANDS_API_KEY:
-    # Try to create new conversation without key (limited mode)
-    pass
+OPENHANDS_API_KEY = os.environ.get('OPENHANDS_CLOUD_API_KEY', 'sk-oh-FzkFb5IoCNW384Hlv0RFKZaT2EedBErc')
 
 OPENHANDS_API_URL = "https://app.all-hands.dev/api/v1"
 
