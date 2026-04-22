@@ -10,8 +10,8 @@ import json
 import logging
 import asyncio
 import aiohttp
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 # Configure logging
 logging.basicConfig(
@@ -146,28 +146,64 @@ async def coder_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command."""
+    """Handle /start command with menu."""
+    keyboard = [
+        [InlineKeyboardButton("🤖 Code", callback_data="code"),
+         InlineKeyboardButton("❓ Help", callback_data="help"),
+         InlineKeyboardButton("📊 Status", callback_data="status")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        "🤖 Coder Bot connected to OpenHands Cloud!\n\n"
-        "I can help you with coding tasks using OpenHands AI.\n\n"
-        "Commands:\n"
-        "/start - Start the bot\n"
-        "/help - Show help\n"
-        "/code <prompt> - Execute coding task"
+        "🤖 Coder Bot - Menu\n\nChoose an option:",
+        reply_markup=reply_markup
     )
+
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show menu."""
+    keyboard = [
+        [InlineKeyboardButton("🤖 Code", callback_data="code")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")],
+        [InlineKeyboardButton("📊 Status", callback_data="status")],
+        [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "📋 Menu:\n\nChoose an option:",
+        reply_markup=reply_markup
+    )
+
+
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle button clicks."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "code":
+        await query.message.reply_text("Send /code <task> to run coding tasks.\n\nExample: /code Create a hello world script")
+    elif query.data == "help":
+        await help_command(update, context)
+    elif query.data == "status":
+        api_status = "✅ OpenHands" if OPENHANDS_API_KEY else "❌ OpenHands"
+        groq_status = "✅ Groq" if GROQ_API_KEY else "❌ Groq"
+        await query.message.reply_text(f"📊 Status:\n\n{api_status}\n{groq_status}")
+    elif query.data == "settings":
+        await query.message.reply_text("⚙️ Settings:\n\nAdd secrets in GitHub:\n- OPENHANDS_CLOUD_API_KEY\n- GROQ_API_KEY")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /help command."""
     await update.message.reply_text(
         "🤖 Coder Bot Commands:\n\n"
-        "/start - Start the bot\n"
-        "/help - Show this help message\n"
-        "/code <task> - Execute a coding task via OpenHands Cloud\n\n"
-        "How it works:\n"
-        "1. Send /code followed by your task\n"
-        "2. Bot sends to OpenHands Cloud API\n"
-        "3. Returns the result"
+        "/start - Start bot with menu\n"
+        "/menu - Show menu buttons\n"
+        "/code <task> - Execute coding task\n"
+        "/help - Show this help\n\n"
+        "Examples:\n"
+        "/code Create hello world\n"
+        "/code Write fibonacci function"
     )
 
 
@@ -207,8 +243,12 @@ def main():
 
     # Register command handlers
     application.add_handler(CommandHandler('start', start_command))
+    application.add_handler(CommandHandler('menu', menu_command))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('code', coder_command))
+    
+    # Register button callback handler
+    application.add_handler(CallbackQueryHandler(button_callback))
 
     # Register message handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
