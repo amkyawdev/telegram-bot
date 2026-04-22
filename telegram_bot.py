@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # Get credentials from environment
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8326636755:AAE0oBv0fBlypnn4_HkgDHHZevswTT-sO30')
 OPENHANDS_API_KEY = os.environ.get('OPENHANDS_CLOUD_API_KEY', '')
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 
 OPENHANDS_API_URL = "https://app.all-hands.dev/api/v1"
 
@@ -94,6 +95,44 @@ async def call_openhands_api(prompt: str) -> str:
             return f"Error: {str(e)}"
 
 
+async def call_groq_api(prompt: str) -> str:
+    """Call Groq API to process the prompt directly (faster than OpenHands)."""
+    if not GROQ_API_KEY:
+        return "Error: GROQ_API_KEY not configured"
+    
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "model": "llama-3.1-70b-versatile"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=headers,
+                json=payload
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        return choices[0].get("message", {}).get("content", "No response")
+                    return "No response from Groq"
+                else:
+                    error_text = await resp.text()
+                    return f"Groq API Error: {resp.status} - {error_text}"
+        except Exception as e:
+            logger.error(f"Groq API call error: {e}")
+            return f"Error: {str(e)}"
+
+
 async def coder_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /code command - execute code via OpenHands."""
     user_id = update.effective_user.id
@@ -139,6 +178,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle messages - try to execute as code task."""
+    logger.info(f"Received message: {update.message.text}")
     text = update.message.text
     
     # Check if it looks like a task request
@@ -146,16 +186,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prompt = text[5:].strip()
         await update.message.reply_text(f"⏳ Executing: {prompt[:50]}...")
         
-        if not OPENHANDS_API_KEY:
-            await update.message.reply_text(
-                "⚠️ No OpenHands API key configured.\n"
-                "Please set OPENHANDS_CLOUD_API_KEY as GitHub Secret.\n"
-                "Go to: Settings → Secrets → Actions\n"
-                "Add: OPENHANDS_CLOUD_API_KEY"
-            )
-            return
+        # Try OpenHands first, then Groq as fallback
+        if OPENHANDS_API_KEY:
+            result = await call_openhands_api(prompt)
+        elif GROQ_API_KEY:
+            result = await call_groq_api(prompt)
+        else:
+            result = "⚠️ No API key configured.\nAdd OPENHANDS_CLOUD_API_KEY or GROQ_API_KEY in GitHub Secrets."
         
-        result = await call_openhands_api(prompt)
         await update.message.reply_text(result[:4000])  # Telegram max message length
     else:
         # Echo back
